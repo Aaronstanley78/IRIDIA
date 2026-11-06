@@ -1,51 +1,78 @@
 'use strict';
+/*
+ * Multi-core DSD encoder: FFmpeg delivers interleaved float PCM at 352.8 kHz, every channel
+ * is modulated on its own CPU core (shared memory, zero copies) while the next chunk is
+ * already being read, and packed bytes go straight to the DSF/DFF writer.
+ */
 const path = require('path');
 const { Worker } = require('worker_threads');
 const { DsfWriter, DffWriter, DSD_BASE } = require('./dsd');
 
-const CHUNK_FRAMES = 88200; // 0.125 s @ 705.6 kHz (even)
+const CHUNK_FRAMES = 176400; // 0.5 s at 352.8 kHz
 
 class DsdEncoder {
   constructor({ file, fmt, channels, layoutId, mul, order }) {
-    this.ch = channels; this.rate = DSD_BASE * mul;
+    this.ch = channels; this.mul = mul; this.rate = DSD_BASE * mul;
     this.writer = fmt === 'dsf' ? new DsfWriter(file, channels, layoutId, this.rate) : new DffWriter(file, channels, layoutId, this.rate);
-    this.workers = Array.from({ length: channels }, () => new Worker(path.join(__dirname, 'dsd_worker.js'), { workerData: { order, mul } }));
-    this.pending = Buffer.alloc(0);
     this.frameBytes = 4 * channels;
+    this.bytesPerCh = CHUNK_FRAMES * mul / 64; // frames × (mul/8) bits / 8
+    // double-buffered shared memory so FFmpeg output can be staged while workers run
+    this.slots = [0, 1].map(() => ({
+      pcm: new SharedArrayBuffer(CHUNK_FRAMES * this.frameBytes),
+      out: new SharedArrayBuffer(this.bytesPerCh * channels)
+    }));
+    this.workers = Array.from({ length: channels }, (_, c) => new Worker(path.join(__dirname, 'dsd_worker.js'), { workerData: { order, mul, channel: c } }));
+    this.fill = 0; this.cur = 0; this.inflight = Promise.resolve();
+    this.pcmView = this.slots.map(s => Buffer.from(s.pcm));
   }
-  _modulate(frames, buf) {
-    const ch = this.ch;
-    const per = Array.from({ length: ch }, () => new Float32Array(frames));
-    for (let i = 0, o = 0; i < frames; i++) for (let c = 0; c < ch; c++, o += 4) per[c][i] = buf.readFloatLE(o);
-    return Promise.all(this.workers.map((w, c) => new Promise((res, rej) => {
-      const onMsg = (m) => { w.off('error', rej); res(m); };
-      w.once('message', onMsg); w.once('error', rej);
-      w.postMessage(per[c], [per[c].buffer]);
-    }))).then(outs => this.writer.write(outs));
+
+  _run(slotIdx, frames) {
+    const slot = this.slots[slotIdx];
+    const jobs = this.workers.map(w => new Promise((res, rej) => {
+      const onMsg = (m) => { if (m.type === 'done') { w.off('message', onMsg); w.off('error', rej); res(); } };
+      w.on('message', onMsg); w.once('error', rej);
+      w.postMessage({ type: 'buffers', pcm: slot.pcm, out: slot.out });
+      w.postMessage({ type: 'run', ch: this.ch, frames, bytesPerCh: this.bytesPerCh });
+    }));
+    return Promise.all(jobs).then(() => {
+      const bytes = frames * this.mul / 64;
+      const o = new Uint8Array(slot.out);
+      this.writer.write(Array.from({ length: this.ch }, (_, c) => o.subarray(c * this.bytesPerCh, c * this.bytesPerCh + bytes)));
+    });
   }
-  /** feed raw f32le interleaved bytes; resolves when processed (back-pressure) */
+
+  /* Stage the full slot and launch it; the previous slot must be finished before it is reused. */
+  async _flush(frames) {
+    const idx = this.cur;
+    await this.inflight;                    // channels are sequential streams: keep chunk order
+    this.inflight = this._run(idx, frames);
+    this.cur ^= 1; this.fill = 0;
+  }
+
   async write(chunk) {
-    this.pending = this.pending.length ? Buffer.concat([this.pending, chunk]) : chunk;
-    const need = CHUNK_FRAMES * this.frameBytes;
-    while (this.pending.length >= need) {
-      const part = this.pending.subarray(0, need);
-      this.pending = this.pending.subarray(need);
-      await this._modulate(CHUNK_FRAMES, part);
+    let off = 0;
+    const cap = CHUNK_FRAMES * this.frameBytes;
+    while (off < chunk.length) {
+      const n = Math.min(cap - this.fill, chunk.length - off);
+      chunk.copy(this.pcmView[this.cur], this.fill, off, off + n);
+      this.fill += n; off += n;
+      if (this.fill === cap) await this._flush(CHUNK_FRAMES);
     }
   }
+
   async end(meta, cover) {
-    let frames = Math.floor(this.pending.length / this.frameBytes);
-    if (frames > 0) {
-      const even = frames + (frames & 1);
-      const buf = Buffer.alloc(even * this.frameBytes);
-      this.pending.copy(buf, 0, 0, frames * this.frameBytes);
-      await this._modulate(even, buf);
-    }
-    const resets = await Promise.all(this.workers.map(w => new Promise(res => { w.once('message', m => res(m.resets || 0)); w.postMessage('stats'); })));
+    const frames = Math.floor(this.fill / this.frameBytes);
+    if (frames > 0) await this._flush(frames);
+    await this.inflight;
+    const resets = await Promise.all(this.workers.map(w => new Promise(res => {
+      const h = (m) => { if (m.type === 'stats') { w.off('message', h); res(m.resets); } };
+      w.on('message', h); w.postMessage({ type: 'stats' });
+    })));
     await Promise.all(this.workers.map(w => w.terminate()));
     this.writer.close(meta, cover);
     return { resets: resets.reduce((a, b) => a + b, 0) };
   }
+
   async abort() { await Promise.all(this.workers.map(w => w.terminate())); try { this.writer.close({}); } catch (e) {} }
 }
-module.exports = { DsdEncoder };
+module.exports = { DsdEncoder, CHUNK_FRAMES };

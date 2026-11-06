@@ -15,6 +15,7 @@ const IOCTL_STORAGE_EJECT_MEDIA = 0x002D4808;
 const IOCTL_STORAGE_LOAD_MEDIA = 0x002D480C;
 const IOCTL_STORAGE_CHECK_VERIFY = 0x002D4800;
 const IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400;
+const IOCTL_CDROM_SET_SPEED = 0x00024060;
 const CDDA = 2;
 const SECTOR = 2352;
 const MAX_SECTORS = 26;
@@ -160,6 +161,15 @@ class WinCdDrive {
   async readCdText() { return readCdText(this.openHandle()); }
   async eject() { const h = open(this.letter); try { await ioctlAsync(h, IOCTL_STORAGE_EJECT_MEDIA, null, 0); } finally { api().CloseHandle(h); this.close(); } }
   async load() { const h = open(this.letter); try { await ioctlAsync(h, IOCTL_STORAGE_LOAD_MEDIA, null, 0); } finally { api().CloseHandle(h); } }
+  /** ask the drive for its maximum read speed (many drives default to a slow DAE speed) */
+  async setMaxSpeed() {
+    const b = Buffer.alloc(12);
+    b.writeUInt32LE(0, 0);          // CdromSetSpeed
+    b.writeUInt16LE(0xFFFF, 4);     // ReadSpeed: maximum
+    b.writeUInt16LE(0xFFFF, 6);     // WriteSpeed: maximum
+    b.writeUInt32LE(0, 8);          // CdromDefaultRotation
+    try { await ioctlAsync(this.openHandle(), IOCTL_CDROM_SET_SPEED, b, 0); return true; } catch (e) { return false; }
+  }
   /** raw CDDA read of `count` sectors starting at `lba` (count ≤ 26) */
   async readSectors(lba, count) {
     const inBuf = Buffer.alloc(16);

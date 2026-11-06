@@ -25,9 +25,9 @@ const DEFAULTS = {
   template: '{albumartist} - {album} [{format}]/{track} - {title}',
   imageTemplate: '{albumartist} - {album} [{format}]/{albumartist} - {album}',
   profiles: [{ presetId: 'flac', selections: {} }], layoutId: 'stereo', upmix: 'smart', rate: 44100,
-  secure: true, offset: 0, retries: 10, deemphasis: true, image: false,
+  secure: false, offset: 0, retries: 10, deemphasis: true, image: false,
   writeCue: true, writeLog: true, writeM3u: true, saveCover: true, embedCover: true,
-  autoLookup: true, ejectWhenDone: false, lastDrive: ''
+  autoLookup: true, ejectWhenDone: false, lastDrive: '', threads: 0
 };
 function loadSettings() { try { return Object.assign({}, DEFAULTS, JSON.parse(fs.readFileSync(settingsFile, 'utf8'))); } catch (e) { return Object.assign({}, DEFAULTS); } }
 let settings = loadSettings();
@@ -122,7 +122,7 @@ ipcMain.handle('win:close', () => win.close());
 ipcMain.handle('app:init', async () => {
   const ff = await probeFfmpeg();
   return {
-    version: app.getVersion(), platform: process.platform, demo: DEMO, dataDir, settings,
+    version: app.getVersion(), platform: process.platform, cpus: require('os').cpus().length, demo: DEMO, dataDir, settings,
     catalog: {
       groups: GROUPS, layouts: LAYOUTS, rates: STD_RATES,
       presets: PRESETS.map(p => ({ id: p.id, name: p.name, group: p.group, desc: p.desc, ext: p.ext, codec: p.codec, fmt: p.fmt, maxCh: p.maxCh, chOptions: p.chOptions || null,
@@ -206,12 +206,13 @@ ipcMain.handle('rip:start', async (e, job) => {
   if (!ffInfo || !ffInfo.path) throw new Error('FFmpeg was not found. Set its location in Settings.');
   const drive = getDrive(job.driveId);
   const cover = job.cover ? { mime: job.cover.mime, data: Buffer.from(job.cover.data, 'base64') } : null;
-  const r = new Ripper(Object.assign({}, job, { drive, cover, ffmpeg: ffInfo.path, hasSoxr: ffInfo.soxr }));
+  const r = new Ripper(Object.assign({}, job, { drive, cover, ffmpeg: ffInfo.path, hasSoxr: ffInfo.soxr, threads: settings.threads || 0 }));
   currentRip = r;
   r.on('progress', p => send('rip:progress', p));
-  r.on('unit', u => send('rip:unit', u));
-  r.on('unitDone', u => send('rip:unitDone', u));
+  let lastTrackEmit = 0;
+  r.on('track', t => { if (t.throttle) { const n = Date.now(); if (n - lastTrackEmit < 100) return; lastTrackEmit = n; } send('rip:track', t); });
   r.on('log', l => send('rip:log', l));
+  if (drive.setMaxSpeed) await drive.setMaxSpeed().catch(() => {});
   try {
     const res = await r.run();
     if (!res.cancelled && settings.ejectWhenDone) { try { await drive.eject(); } catch (err) {} }

@@ -25,21 +25,30 @@ class DemoDrive {
   }
   async eject() {} async load() {} close() {}
   async readSectors(lba, count) {
-    await new Promise(r => setTimeout(r, 2));
-    const buf = Buffer.alloc(count * SECTOR);
     const toc = this._toc || await this.readToc();
-    for (let s = 0; s < count * 588; s++) {
-      const n = (lba * 588) + s; const t = n / 44100;
-      const tr = toc.tracks.findIndex(x => lba + Math.floor(s / 588) < x.lba + x.sectors);
-      const chord = NOTES[(Math.floor(t / 2) + Math.max(tr, 0)) % NOTES.length];
-      const env = 0.5 + 0.5 * Math.sin(2 * Math.PI * t * 0.5);
-      let l = 0, r = 0;
-      chord.forEach((f, k) => { const v = Math.sin(2 * Math.PI * f * (1 + 0.002 * tr) * t); l += v * (k === 2 ? 0.6 : 1); r += v * (k === 0 ? 0.6 : 1); });
-      const beat = Math.exp(-((t % 0.5) * 18)) * Math.sin(2 * Math.PI * 55 * t);
-      l = (l * 0.18 * env + beat * 0.25); r = (r * 0.18 * env + beat * 0.25);
-      buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(l * 32767))), s * 4);
-      buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(r * 32767))), s * 4 + 2);
+    const speed = +(process.env.IRIDIA_DEMO_SPEED || 24);           // emulate a 24× drive
+    const t0 = Date.now();
+    const n = count * 588;
+    const buf = Buffer.alloc(n * 4);
+    const pcm = new Int16Array(buf.buffer, buf.byteOffset, n * 2);
+    let tr = toc.tracks.findIndex(x => lba < x.lba + x.sectors);
+    if (tr < 0) tr = toc.tracks.length - 1;
+    const tw = 2 * Math.PI / 44100;
+    for (let s = 0; s < n; s++) {
+      const idx = lba * 588 + s, t = idx / 44100;
+      const chord = NOTES[(Math.floor(t / 2) + tr) % NOTES.length];
+      const env = 0.5 + 0.5 * Math.sin(Math.PI * t);
+      const detune = 1 + 0.002 * tr;
+      const v0 = Math.sin(tw * chord[0] * detune * idx), v1 = Math.sin(tw * chord[1] * detune * idx), v2 = Math.sin(tw * chord[2] * detune * idx);
+      const tb = t % 0.5;
+      const beat = Math.exp(-tb * 18) * Math.sin(tw * 55 * idx);
+      const l = (v0 + v1 + 0.6 * v2) * 0.18 * env + beat * 0.25;
+      const r = (0.6 * v0 + v1 + v2) * 0.18 * env + beat * 0.25;
+      pcm[2 * s] = Math.max(-32768, Math.min(32767, Math.round(l * 32767)));
+      pcm[2 * s + 1] = Math.max(-32768, Math.min(32767, Math.round(r * 32767)));
     }
+    const want = (n / 44100) / speed * 1000 - (Date.now() - t0);
+    if (want > 0) await new Promise(r => setTimeout(r, want));
     return buf;
   }
 }

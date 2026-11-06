@@ -78,7 +78,9 @@ function buildArgs(opts) {
   const p = opts.preset;
   const { layout } = effectiveLayout(p, opts.layoutId);
   const rate = effectiveRate(p, opts.rate);
-  const a = ['-hide_banner', '-y', '-loglevel', 'error', '-nostats']; // stdin carries our PCM
+  const a = ['-hide_banner', '-y', '-loglevel', 'error', '-nostats'];
+  if (opts.inputArgs) a.push('-nostdin'); // file input: keep stdin free
+  if (opts.threads) a.push('-threads', String(opts.threads));
   a.push(...(opts.inputArgs || ['-f', 's16le', '-ar', '44100', '-ch_layout', 'stereo', '-i', 'pipe:0']));
   let inputs = 1;
   const useCover = opts.coverPath && p.cover;
@@ -94,7 +96,7 @@ function buildArgs(opts) {
   if (opts.preGain) filters.push(`volume=${opts.preGain}dB`);
   filters.push(...channelFilter(layout, opts.upmix || 'smart'));
   const isDsd = p.codec === 'dsd';
-  const outRate = isDsd ? 705600 : rate;
+  const outRate = isDsd ? 352800 : rate;
   if (outRate !== 44100) filters.push(opts.hasSoxr === false ? `aresample=${outRate}` : `aresample=${outRate}:resampler=soxr:precision=28`);
   filters.push(`aformat=channel_layouts=${layout.ff}`);
   if (p.postFilters) filters.push(...p.postFilters);
@@ -141,6 +143,7 @@ function buildArgs(opts) {
   md('date', m.year); md('genre', m.genre); md('composer', m.composer); md('comment', m.comment || 'Ripped with IRIDIA');
   if (m.track) md('track', m.totalTracks ? `${m.track}/${m.totalTracks}` : m.track);
   if (m.disc) md('disc', m.disc);
+  if (opts.progress) a.push('-progress', 'pipe:1');
   a.push('-f', p.fmt, opts.output);
   return { args: a, layout, rate };
 }

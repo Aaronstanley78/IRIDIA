@@ -330,3 +330,5 @@ input.tpl { width: 100%; margin-top: 6px; font: 12px ui-monospace, 'Cascadia Mon
 @media (max-width: 1320px) { .layout { grid-template-columns: 300px 1fr 360px; } .disc-stage { width: 220px; height: 220px; } }
 .field input, .set-body input.tpl { flex: none; }
 .set-card .modal-head .icon-btn { margin-left: auto; }
+
+.trow.enc .bar { background: linear-gradient(90deg, rgba(255, 107, 213, .14), rgba(255, 196, 107, .2)); }

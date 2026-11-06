@@ -71,8 +71,7 @@ function bindChrome() {
   }
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $$('.modal').forEach(m => m.hidden = true); $('#logDrawer').classList.remove('open'); } });
   api.on('rip:progress', onProgress);
-  api.on('rip:unit', onUnit);
-  api.on('rip:unitDone', onUnitDone);
+  api.on('rip:track', onTrack);
   api.on('rip:log', (l) => { S.log.push(l); const pre = $('#logPre'); pre.textContent += l + '\n'; pre.scrollTop = pre.scrollHeight; });
 }
 
@@ -202,8 +201,9 @@ function updateTrackRow(t, row = $(`.trow[data-n="${t.number}"]`)) {
   const st = row.querySelector('.st');
   st.className = 'st r' + (t.status === 'done' ? ' ok' : t.status === 'error' ? ' err' : '');
   st.innerHTML = t.status === 'done' ? `${icon('check')}${esc(t.crc || 'Done')}` : t.status === 'error' ? `${icon('triangle-alert')}Error`
-    : t.status === 'ripping' ? `${Math.round((t.pct || 0) * 100)}%` : t.status === 'encoding' ? 'Finishing…' : t.status === 'queued' ? 'Queued' : '';
-  row.classList.toggle('active', t.status === 'ripping' || t.status === 'encoding');
+    : t.status === 'reading' ? `Reading ${Math.round((t.pct || 0) * 100)}%` : t.status === 'encoding' ? `Encoding ${Math.round((t.pct || 0) * 100)}%` : t.status === 'queued' ? 'Queued' : '';
+  row.classList.toggle('active', t.status === 'reading' || t.status === 'encoding');
+  row.classList.toggle('enc', t.status === 'encoding');
 }
 
 /* =================================================================== output: profiles */
@@ -375,6 +375,7 @@ function openSettings() {
   const f = S.init.ffmpeg;
   $('#sFfInfo').textContent = f.path ? `Using ${f.path} — version ${f.version}${f.soxr ? ' · SoX resampler' : ''}` : 'FFmpeg not found.';
   $('#sOffset').value = s.offset; $('#sRetries').value = s.retries;
+  $('#sThreads').value = s.threads || 0; $('#sCpu').textContent = `${S.init.cpus} logical CPU threads — tracks and formats are encoded in parallel`;
   $('#sDeemph').checked = s.deemphasis; $('#sEject').checked = s.ejectWhenDone; $('#sAuto').checked = s.autoLookup;
   $('#sEmbed').checked = s.embedCover; $('#sCover').checked = s.saveCover; $('#sLog').checked = s.writeLog; $('#sM3u').checked = s.writeM3u; $('#sCue').checked = s.writeCue;
   $('#sImgTpl').value = s.imageTemplate;
@@ -392,6 +393,7 @@ async function applyFf(p) {
 $('#sFf').onchange = (e) => applyFf(e.target.value.trim());
 $('#sFfBrowse').onclick = async () => { const p = await api.pickFfmpeg(); if (p) { $('#sFf').value = p; applyFf(p); } };
 $('#sOffset').onchange = (e) => save({ offset: parseInt(e.target.value, 10) || 0 });
+$('#sThreads').onchange = (e) => save({ threads: Math.max(0, parseInt(e.target.value, 10) || 0) });
 $('#sRetries').onchange = (e) => save({ retries: Math.max(0, parseInt(e.target.value, 10) || 0) });
 for (const [id, k] of [['#sDeemph', 'deemphasis'], ['#sEject', 'ejectWhenDone'], ['#sAuto', 'autoLookup'], ['#sEmbed', 'embedCover'], ['#sCover', 'saveCover'], ['#sLog', 'writeLog'], ['#sM3u', 'writeM3u'], ['#sCue', 'writeCue']]) {
   $(id).onchange = (e) => save({ [k]: e.target.checked });
@@ -454,7 +456,7 @@ async function startRip() {
     else {
       const bad = res.results.filter(r => !r.ok).length;
       setRing(1);
-      $('#sbStatus').innerHTML = bad ? `<b>Finished with ${bad} error(s)</b>` : '<b>All done</b> — perfect extraction';
+      $('#sbStatus').innerHTML = bad ? `<b>Finished with ${bad} error(s)</b>` : `<b>All done</b> in ${fmtLong(res.seconds || 0)}`;
       const t = toast(bad ? 'err' : 'ok', bad ? 'Rip finished with errors' : 'Rip complete', `${res.results.length - bad} item(s) written${res.errors ? ` · ${res.errors} read error(s)` : ''}.\nClick to open the output folder.`, 9000);
       t.style.cursor = 'pointer'; t.onclick = () => api.open(res.dirs && res.dirs[0] ? res.dirs[0] : outDir);
     }
@@ -467,25 +469,20 @@ async function startRip() {
   }
 }
 async function cancelRip() { $('#sbStatus').textContent = 'Cancelling…'; await api.cancelRip(); }
-let unitTracks = [];
-function onUnit(u) {
-  unitTracks = u.track === 0 ? S.tracks.filter(t => t.status === 'queued') : [S.tracks.find(t => t.number === u.track)];
-  unitTracks.forEach(t => { if (t) { t.status = 'ripping'; t.pct = 0; updateTrackRow(t); } });
-  if (u.track) $(`.trow[data-n="${u.track}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+function onTrack(ev) {
+  const list = ev.track === 0 ? S.tracks.filter(t => t.status && t.status !== '') : [S.tracks.find(t => t.number === ev.track)];
+  list.forEach(t => {
+    if (!t) return;
+    const prevState = t.status;
+    t.status = ev.state; t.pct = ev.pct || 0;
+    if (ev.state === 'done') t.crc = ev.track ? (ev.crc >>> 0).toString(16).toUpperCase().padStart(8, '0') : '';
+    updateTrackRow(t);
+    if (ev.state === 'reading' && prevState !== 'reading' && ev.track) $(`.trow[data-n="${ev.track}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
 }
 function onProgress(p) {
   setRing(p.totalPct);
-  if (p.peak != null) setMeter(p.peak);
-  if (p.speed) $('#sbSpeed').innerHTML = `Speed <b>${p.speed.toFixed(1)}×</b>`;
-  if (p.eta) $('#sbEta').innerHTML = `Remaining <b>${fmtLong(p.eta)}</b>`;
-  const n = unitTracks.length;
-  unitTracks.forEach((t, i) => {
-    if (!t) return;
-    t.pct = n > 1 ? Math.max(0, Math.min(1, p.unitPct * n - i)) : p.unitPct;
-    if (p.encoding) t.status = 'encoding';
-    updateTrackRow(t);
-  });
-}
-function onUnitDone(u) {
-  unitTracks.forEach(t => { if (!t) return; t.status = u.ok ? 'done' : 'error'; t.pct = u.ok ? 1 : 0; t.crc = u.ok && unitTracks.length === 1 ? (u.crc >>> 0).toString(16).toUpperCase().padStart(8, '0') : ''; updateTrackRow(t); });
+  if (p.peak != null && p.readPct < 1) setMeter(p.peak);
+  $('#sbSpeed').innerHTML = p.readPct < 1 ? `Drive <b>${p.speed.toFixed(1)}×</b>` : 'Drive <b>done</b>';
+  $('#sbEta').innerHTML = `${p.activeJobs ? `Encoders <b>${p.activeJobs}</b> on ${p.cores} threads · ` : ''}${p.eta ? `Remaining <b>${fmtLong(p.eta)}</b>` : ''}`;
 }

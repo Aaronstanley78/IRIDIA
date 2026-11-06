@@ -2,72 +2,12 @@
 /*
  * IRIDIA DSD engine
  * -----------------
- * Converts PCM (float, 705.6 kHz from FFmpeg/SoX resampler) into 1-bit DSD using a
- * high-order error-feedback sigma-delta modulator (5th or 7th order, Legendre-optimised
- * NTF zeros, Butterworth poles, H∞ = 1.5), then writes DSF or DSDIFF (DFF) files.
- *
- * Measured in-band SNR (1 kHz, -6 dB, 20 kHz band, DSD64): 5th ≈ 117 dB, 7th ≈ 135 dB.
+ * DSF / DSDIFF (DFF) container writers and ID3 tagging. The modulator lives in sdm.js.
  */
 const fs = require('fs');
 const path = require('path');
-const NTF = require('./ntf');
 
 const DSD_BASE = 44100;          // DSD64 = 64 × 44.1 kHz
-const PCM_RATE = 705600;         // 16 × 44.1 kHz — rate FFmpeg delivers to the modulator
-const SACD_GAIN = 0.5;           // 0 dBFS PCM = 50 % modulation (SACD reference level)
-const LIMIT = 0.5;
-
-/* ------------------------------------------------------------- modulator */
-class Modulator {
-  constructor(order, mul) {
-    const key = `${order}_${mul}`;
-    const sos = NTF[key];
-    if (!sos) throw new Error('No NTF for ' + key);
-    this.n = sos.length;
-    this.b1 = Float64Array.from(sos.map(s => s[1]));
-    this.b2 = Float64Array.from(sos.map(s => s[2]));
-    this.a1 = Float64Array.from(sos.map(s => s[4]));
-    this.a2 = Float64Array.from(sos.map(s => s[5]));
-    this.s1 = new Float64Array(this.n);
-    this.s2 = new Float64Array(this.n);
-    this.K = mul / 16;           // linear interpolation factor from 705.6 kHz
-    this.prev = 0;
-    this.resets = 0;
-    this.acc = 0; this.nbits = 0; // bit packer (MSB first)
-  }
-  /** Process float PCM @705.6k, returns packed DSD bytes (MSB = first bit). Input length × K must be a multiple of 8. */
-  process(input) {
-    const { n, b1, b2, a1, a2, s1, s2, K } = this;
-    const out = new Uint8Array((input.length * K) >> 3);
-    let o = 0, acc = this.acc, nb = this.nbits, prev = this.prev;
-    const invK = 1 / K;
-    for (let i = 0; i < input.length; i++) {
-      let cur = input[i] * SACD_GAIN;
-      if (cur > LIMIT) cur = LIMIT; else if (cur < -LIMIT) cur = -LIMIT;
-      const d = (cur - prev) * invK;
-      for (let k = 1; k <= K; k++) {
-        const x = prev + d * k;
-        let g = 0;
-        for (let j = 0; j < n; j++) g += s1[j];
-        const v = x + g;
-        const q = v >= 0 ? 1 : -1;
-        let inp = q - v;
-        for (let j = 0; j < n; j++) {
-          const y = inp + s1[j];
-          s1[j] = b1[j] * inp - a1[j] * y + s2[j];
-          s2[j] = b2[j] * inp - a2[j] * y;
-          inp = y;
-        }
-        if (v > 8 || v < -8) { s1.fill(0); s2.fill(0); this.resets++; }
-        acc = (acc << 1) | (q > 0 ? 1 : 0);
-        if (++nb === 8) { out[o++] = acc; acc = 0; nb = 0; }
-      }
-      prev = cur;
-    }
-    this.acc = acc; this.nbits = nb; this.prev = prev;
-    return o === out.length ? out : out.subarray(0, o);
-  }
-}
 
 /* --------------------------------------------------------------- ID3v2.3 */
 function id3Frame(id, data) {
@@ -209,4 +149,4 @@ class DffWriter {
   }
 }
 
-module.exports = { Modulator, DsfWriter, DffWriter, buildId3, DSD_BASE, PCM_RATE, DSF_CHANNEL_TYPE, DFF_IDS };
+module.exports = { DsfWriter, DffWriter, buildId3, DSD_BASE, DSF_CHANNEL_TYPE, DFF_IDS };

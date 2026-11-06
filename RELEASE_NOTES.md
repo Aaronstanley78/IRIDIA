@@ -24,7 +24,7 @@ Extract the archive anywhere and launch **`IRIDIA.exe`**.
   - speech: AMR, G.7xx, GSM, iLBC, Codec 2, Speex
   - every ADPCM / retro game format
   - IAMF immersive audio
-- **Native DSD encoder:** **DSF** and **DFF**, from DSD64 to **DSD512**, with a 5th- or 7th-order ΣΔ modulator (≈135 dB in-band SNR, simulated), multithreaded, ID3 tags and cover art included.
+- **Native DSD encoder:** **DSF** and **DFF**, from DSD64 to **DSD512**, with a 5th- or 7th-order ΣΔ modulator (≈121 dB in-band SNR at full scale, DSD64, 7th order), one CPU core per channel, ID3 tags and cover art included.
 - **Several formats in one pass:** the disc is read once and every format is encoded in parallel.
 
 ### 🔊 Surround up to 7.1
@@ -33,9 +33,16 @@ Extract the archive anywhere and launch **`IRIDIA.exe`**.
 - Each format is adapted automatically to its own limits (channels and sample rate), and IRIDIA tells you when it does.
 - Sample rates from 8 kHz to 384 kHz via the SoX resampler. 44.1 kHz stays bit-perfect.
 
+### ⚡ Performance
+- A parallel pipeline: the drive keeps reading while finished tracks are encoded. Every track and every format is encoded at the same time, across all CPU cores.
+- The drive is asked for its maximum read speed before ripping.
+- The DSD engine has been rewritten. It uses one CPU core per channel, a specialised modulator kernel about 2× faster per core, and half the resampling work.
+- Measured on a 2-core test machine, for a 4:31 album as 5.1 FLAC + AC-3 + DSF: **121 s → 55 s**. The gain is larger on machines with more cores.
+- Encoding runs on the CPU. FFmpeg's audio encoders don't support GPU acceleration, and the DSD modulator can't be split for a GPU without hurting quality.
+
 ### 💿 Ripping
 - Native Windows CD access: raw CDDA reads, TOC, **CD-Text**, drive model detection, tray eject.
-- **Secure mode** (every block read twice and compared), read retries, sector-level recovery.
+- Optional **secure mode** (every block read twice and compared, at half speed), read retries, sector-level recovery.
 - **Drive read-offset correction** and automatic **de-emphasis** for pre-emphasised discs.
 - **MusicBrainz** lookup (disc ID plus fuzzy TOC fallback), a picker when several releases match, and **Cover Art Archive** artwork.
 

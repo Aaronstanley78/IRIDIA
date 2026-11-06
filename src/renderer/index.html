@@ -128,7 +128,7 @@
       </div>
 
       <div class="sect toggles">
-        <label class="tog"><input type="checkbox" id="tSecure"><i></i><span><b>Secure mode</b><em>Dual read &amp; compare every block</em></span></label>
+        <label class="tog"><input type="checkbox" id="tSecure"><i></i><span><b>Secure mode</b><em>Dual read &amp; compare (halves read speed)</em></span></label>
         <label class="tog"><input type="checkbox" id="tImage"><i></i><span><b>Single-file image</b><em>One file per format + CUE sheet</em></span></label>
       </div>
     </div>
@@ -184,6 +184,11 @@
       </div>
       <label class="tog"><input type="checkbox" id="sDeemph"><i></i><span><b>Auto de-emphasis</b><em>Apply CD de-emphasis on tracks flagged with pre-emphasis</em></span></label>
       <label class="tog"><input type="checkbox" id="sEject"><i></i><span><b>Eject when finished</b></span></label>
+      <h4>Performance</h4>
+      <div class="grid2">
+        <label class="field"><span>Parallel encoder threads (0 = all cores)</span><input type="number" id="sThreads" min="0" max="256"></label>
+        <div class="field"><span>Detected</span><p class="muted" id="sCpu" style="margin-top:9px"></p></div>
+      </div>
       <h4>Metadata &amp; side files</h4>
       <label class="tog"><input type="checkbox" id="sAuto"><i></i><span><b>Automatic MusicBrainz lookup</b><em>Query musicbrainz.org when a disc is inserted</em></span></label>
       <label class="tog"><input type="checkbox" id="sEmbed"><i></i><span><b>Embed cover art</b><em>FLAC, MP3, M4A/ALAC and DSF/DFF (ID3)</em></span></label>

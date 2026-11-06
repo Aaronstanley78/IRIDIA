@@ -6,7 +6,7 @@ async function enc(fmt, layout, ch, mul, order) {
   const file = `/home/claude/t/out/dsd_${layout}_${mul}_${order}.${fmt}`;
   const t0 = Date.now();
   const filt = layout === 'stereo' ? 'anull' : `surround=chl_out=${layout}`;
-  const ff = spawn('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=1000:d=3:sample_rate=44100,volume=0.5,pan=stereo|c0=c0|c1=c0', '-af', `${filt},aresample=705600:resampler=soxr`, '-f', 'f32le', '-c:a', 'pcm_f32le', 'pipe:1']);
+  const ff = spawn('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=1000:d=3:sample_rate=44100,volume=0.5,pan=stereo|c0=c0|c1=c0', '-af', `${filt},aresample=352800:resampler=soxr:precision=28`, '-f', 'f32le', '-c:a', 'pcm_f32le', 'pipe:1']);
   const e = new DsdEncoder({ file, fmt, channels: ch, layoutId: layout, mul, order });
   for await (const chunk of ff.stdout) await e.write(chunk);
   const r = await e.end({ title: 'Tone', artist: 'Iridia', album: 'Test', track: 1, totalTracks: 1 });
