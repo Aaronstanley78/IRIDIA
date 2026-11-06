@@ -1,0 +1,21 @@
+{
+  "name": "iridia",
+  "productName": "IRIDIA",
+  "version": "1.0.0",
+  "description": "IRIDIA — CD audio ripper for every FFmpeg audio format, native DSD (DSF/DFF) and up to 7.1 surround.",
+  "main": "src/main.js",
+  "author": "realauthorfilms",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "test:catalog": "node tools/test_catalog.js",
+    "test:dsd": "node tools/test_dsd.js"
+  },
+  "dependencies": {
+    "koffi": "^2.16.3"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "^45.2.3"
+  }
+}

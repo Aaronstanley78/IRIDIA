@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'">
+<title>IRIDIA</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="bg" aria-hidden="true"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i><i class="grain"></i></div>
+
+<header class="titlebar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7CF7FF"/><stop offset=".4" stop-color="#8B7CFF"/><stop offset=".7" stop-color="#FF6BD5"/><stop offset="1" stop-color="#FFC46B"/></linearGradient></defs>
+      <circle cx="24" cy="24" r="21" fill="none" stroke="url(#lg)" stroke-width="3"/>
+      <circle cx="24" cy="24" r="13" fill="none" stroke="url(#lg)" stroke-width="2" opacity=".65"/>
+      <circle cx="24" cy="24" r="4" fill="url(#lg)"/>
+      <path d="M24 3 L24 45" stroke="url(#lg)" stroke-width="1.2" opacity=".35"/>
+    </svg>
+    <div class="wordmark">IRIDIA<span>every disc · every format · every channel</span></div>
+  </div>
+  <div class="drivebar no-drag">
+    <div class="select-wrap"><span class="drive-ic" data-icon="disc-3"></span><select id="driveSel"></select></div>
+    <button class="icon-btn" id="btnRefresh" title="Re-read disc" data-icon="refresh-cw"></button>
+    <button class="icon-btn" id="btnEject" title="Eject" data-icon="eject"></button>
+  </div>
+  <div class="win no-drag">
+    <button class="icon-btn" id="btnSettings" title="Settings" data-icon="settings"></button>
+    <span class="sep"></span>
+    <button class="wbtn" id="wMin" data-icon="minus"></button>
+    <button class="wbtn" id="wMax" data-icon="square"></button>
+    <button class="wbtn close" id="wClose" data-icon="x"></button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ============ LEFT: DISC ============ -->
+  <section class="panel disc-panel">
+    <div class="disc-stage">
+      <svg class="ring" viewBox="0 0 200 200"><circle class="ring-bg" cx="100" cy="100" r="96"/><circle class="ring-fg" id="ringFg" cx="100" cy="100" r="96"/></svg>
+      <div class="disc" id="disc">
+        <div class="disc-sheen"></div>
+        <div class="disc-grooves"></div>
+        <div class="disc-label" id="discLabel"><img id="coverImg" alt=""><div class="label-fallback" data-icon="music-2"></div></div>
+        <div class="disc-hole"></div>
+      </div>
+      <button class="cover-btn" id="btnCover" title="Choose cover art" data-icon="image"></button>
+      <div class="disc-pct" id="discPct"></div>
+    </div>
+
+    <div class="album-fields">
+      <input class="f-title" id="fAlbum" placeholder="Album title" spellcheck="false">
+      <input class="f-artist" id="fArtist" placeholder="Album artist" spellcheck="false">
+      <div class="row3">
+        <label><span>Year</span><input id="fYear" placeholder="—"></label>
+        <label><span>Genre</span><input id="fGenre" placeholder="—"></label>
+        <label><span>Disc</span><input id="fDisc" placeholder="1"></label>
+      </div>
+    </div>
+
+    <div class="meta-actions">
+      <button class="btn ghost" id="btnLookup"><span data-icon="wand-sparkles"></span>MusicBrainz lookup</button>
+      <div class="release-pick" id="releasePick" hidden><div class="select-wrap full"><select id="releaseSel"></select></div></div>
+    </div>
+
+    <div class="meter"><div class="meter-top"><span>Peak level</span><b id="meterVal">—</b></div><div class="meter-bars" id="meterBars"></div></div>
+
+    <div class="disc-stats" id="discStats">
+      <div><b id="stTracks">—</b><span>tracks</span></div>
+      <div><b id="stTime">—</b><span>length</span></div>
+      <div><b id="stSrc">—</b><span>metadata</span></div>
+    </div>
+    <div class="discid" id="discIdLine"></div>
+  </section>
+
+  <!-- ============ CENTER: TRACKS ============ -->
+  <section class="panel tracks-panel">
+    <div class="panel-head">
+      <h2>Tracks</h2>
+      <div class="head-tools">
+        <button class="chip-btn" id="selAll">All</button>
+        <button class="chip-btn" id="selNone">None</button>
+      </div>
+    </div>
+    <div class="track-head"><span></span><span>#</span><span>Title</span><span>Artist</span><span class="r">Time</span><span class="r">Status</span></div>
+    <div class="tracks" id="tracks">
+      <div class="empty" id="emptyState">
+        <div class="empty-disc"></div>
+        <h3>Insert an audio CD</h3>
+        <p>IRIDIA reads the table of contents, CD-Text and MusicBrainz data automatically.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT: OUTPUT ============ -->
+  <section class="panel out-panel">
+    <div class="scroll">
+      <div class="sect">
+        <div class="sect-head"><h3><span data-icon="layers"></span>Output formats</h3><button class="chip-btn accent" id="btnAddFmt"><span data-icon="plus"></span>Add</button></div>
+        <div class="profiles" id="profiles"></div>
+      </div>
+
+      <div class="sect">
+        <div class="sect-head"><h3><span data-icon="speaker"></span>Channels</h3><span class="hint" id="layoutHint"></span></div>
+        <div class="speaker-wrap">
+          <svg class="speakers" id="speakers" viewBox="0 0 220 170"></svg>
+        </div>
+        <div class="layout-grid" id="layoutGrid"></div>
+        <div class="seg" id="upmixSeg">
+          <button data-v="smart" title="FFmpeg surround filter — frequency-domain upmix with LFE extraction">Smart upmix</button>
+          <button data-v="matrix" title="Classic matrix decode with low-passed LFE">Matrix</button>
+          <button data-v="front" title="Stereo on front L/R only, other channels silent">Front only</button>
+        </div>
+        <div class="warn" id="clampWarn" hidden></div>
+      </div>
+
+      <div class="sect">
+        <div class="sect-head"><h3><span data-icon="audio-lines"></span>Sample rate</h3></div>
+        <div class="select-wrap full"><select id="rateSel"></select></div>
+      </div>
+
+      <div class="sect">
+        <div class="sect-head"><h3><span data-icon="folder-output"></span>Destination</h3></div>
+        <div class="path-row"><input id="outDir" spellcheck="false"><button class="icon-btn" id="btnOutDir" data-icon="folder-open"></button></div>
+        <input id="template" class="tpl" spellcheck="false" title="Tokens: {albumartist} {artist} {album} {title} {track} {year} {genre} {disc} {format}">
+        <div class="tokens">{albumartist} {artist} {album} {title} {track} {year} {genre} {disc} {format}</div>
+      </div>
+
+      <div class="sect toggles">
+        <label class="tog"><input type="checkbox" id="tSecure"><i></i><span><b>Secure mode</b><em>Dual read &amp; compare every block</em></span></label>
+        <label class="tog"><input type="checkbox" id="tImage"><i></i><span><b>Single-file image</b><em>One file per format + CUE sheet</em></span></label>
+      </div>
+    </div>
+    <div class="rip-zone">
+      <button class="rip-btn" id="btnRip"><span class="rip-glow"></span><span class="rip-inner"><span data-icon="disc-3"></span><b id="ripLabel">Rip CD</b></span></button>
+    </div>
+  </section>
+</main>
+
+<footer class="statusbar">
+  <div class="sb-progress"><div class="sb-fill" id="sbFill"></div></div>
+  <div class="sb-row">
+    <span id="sbStatus">Ready</span>
+    <span class="sb-sp"></span>
+    <span id="sbSpeed"></span>
+    <span id="sbEta"></span>
+    <button class="sb-link" id="btnLog"><span data-icon="scroll-text"></span>Log</button>
+    <span class="sb-ff" id="sbFf"></span>
+  </div>
+</footer>
+
+<!-- Log drawer -->
+<aside class="drawer" id="logDrawer"><div class="drawer-head"><h3>Extraction log</h3><button class="icon-btn" id="logCopy" title="Copy" data-icon="copy"></button><button class="icon-btn" id="logClose" data-icon="x"></button></div><pre id="logPre"></pre></aside>
+
+<!-- Format browser -->
+<div class="modal" id="fmtModal" hidden>
+  <div class="modal-card fmt-card">
+    <div class="modal-head">
+      <h2>Choose output formats</h2>
+      <div class="search"><span data-icon="search"></span><input id="fmtSearch" placeholder="Search 140+ formats — flac, dsd, opus, 7.1, adpcm…" spellcheck="false"></div>
+      <button class="icon-btn" id="fmtClose" data-icon="x"></button>
+    </div>
+    <div class="fmt-body">
+      <nav class="fmt-groups" id="fmtGroups"></nav>
+      <div class="fmt-grid" id="fmtGrid"></div>
+    </div>
+    <div class="modal-foot"><span id="fmtCount"></span><button class="btn primary" id="fmtDone">Done</button></div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="modal" id="setModal" hidden>
+  <div class="modal-card set-card">
+    <div class="modal-head"><h2>Settings</h2><button class="icon-btn" id="setClose" data-icon="x"></button></div>
+    <div class="set-body">
+      <h4>FFmpeg</h4>
+      <div class="path-row"><input id="sFf" placeholder="Auto-detect (bundled ffmpeg\ffmpeg.exe or PATH)" spellcheck="false"><button class="icon-btn" id="sFfBrowse" data-icon="folder-open"></button></div>
+      <p class="muted" id="sFfInfo"></p>
+      <h4>Extraction</h4>
+      <div class="grid2">
+        <label class="field"><span>Drive read offset (samples)</span><input type="number" id="sOffset" step="1"></label>
+        <label class="field"><span>Read retries</span><input type="number" id="sRetries" min="0" max="100"></label>
+      </div>
+      <label class="tog"><input type="checkbox" id="sDeemph"><i></i><span><b>Auto de-emphasis</b><em>Apply CD de-emphasis on tracks flagged with pre-emphasis</em></span></label>
+      <label class="tog"><input type="checkbox" id="sEject"><i></i><span><b>Eject when finished</b></span></label>
+      <h4>Metadata &amp; side files</h4>
+      <label class="tog"><input type="checkbox" id="sAuto"><i></i><span><b>Automatic MusicBrainz lookup</b><em>Query musicbrainz.org when a disc is inserted</em></span></label>
+      <label class="tog"><input type="checkbox" id="sEmbed"><i></i><span><b>Embed cover art</b><em>FLAC, MP3, M4A/ALAC and DSF/DFF (ID3)</em></span></label>
+      <label class="tog"><input type="checkbox" id="sCover"><i></i><span><b>Save cover.jpg</b></span></label>
+      <label class="tog"><input type="checkbox" id="sLog"><i></i><span><b>Write extraction log</b></span></label>
+      <label class="tog"><input type="checkbox" id="sM3u"><i></i><span><b>Write M3U8 playlist</b></span></label>
+      <label class="tog"><input type="checkbox" id="sCue"><i></i><span><b>Write CUE sheet (image mode)</b></span></label>
+      <h4>Image naming</h4>
+      <input id="sImgTpl" class="tpl" spellcheck="false">
+      <p class="muted" id="sData"></p>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
